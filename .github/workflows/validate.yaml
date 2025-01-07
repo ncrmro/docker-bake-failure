@@ -1,0 +1,75 @@
+# Rename to validate
+name: Build Subrepos testing
+
+on:
+  pull_request:
+    branches:
+      - "**"
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GCR_IMAGE: ghcr.io/unsupervisedcom/unsupervised-main
+  HARBOR_IMAGE: harbor.unsupervised.com/images/unsupervised-main
+
+jobs:
+  build-suprepo-example-1:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./subrepos/compute
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Build
+        uses: docker/build-push-action@v6
+        with:
+          file: subrepos/example1/Dockerfile
+          context: subrepos/example1
+          cache-from:
+            type=registry,ref=ghcr.io/ncrmro/docker-bake-failure:cache-subrepo-example1
+          cache-to: type=registry,ref=ghcr.io/ncrmro/docker-bake-failure:cache-subrepo-example1,mode=max
+
+  build-primary:
+    name: Kick of code tests
+    runs-on: ubuntu-latest
+    needs:
+      - build-suprepo-example-1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/bake-action@v5
+        with:
+          push: false
+          targets: default
+          github-token: ${{ inputs.token }}
+          set: |
+            default.cache-from=type=registry,ref=ghcr.io/ncrmro/docker-bake-failure:cache-default
+            default.cache-to=type=registry,ref=ghcr.io/ncrmro/docker-bake-failure:cache-default,mode=max
+            subrepo-example1.cache-from=type=registry,ref=ghcr.io/ncrmro/docker-bake-failure:cache-subrepo-example1,mode=max
