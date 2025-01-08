@@ -1,6 +1,7 @@
 target "default" {
   context = "."
   dockerfile = "Dockerfile"
+  target = "production"
   contexts = {
       example1 = "target:subrepo-example1"
       example2 = "target:subrepo-example2"
